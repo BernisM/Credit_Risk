@@ -105,3 +105,112 @@ loan_data['inq_last_6mths'].fillna(0,inplace=True)
 loan_data['delinq_2yrs'].fillna(0,inplace=True)
 loan_data['emp_length_int'].fillna(0,inplace=True)
 
+#### PD MODEL
+# Data preparation 
+
+loan_data['loan_status'].unique()
+
+# Calculates the number of observations for each unique value of a variable.
+loan_data['loan_status'].value_counts()
+
+# We divide the number of observations for each unique value of a variable by the total number of observations.
+# Thus, we get the proportion of observations for each unique value of a variable.
+loan_data['loan_status'].value_counts() / loan_data['loan_status'].count()
+
+# Good/ Bad Definition
+# We create a new variable that has the value of '0' if a condition is met, and the value of '1' if it is not met.
+loan_data['good_bad'] = np.where(loan_data['loan_status'].isin(['Charged Off', 'Default',
+                                                       'Does not meet the credit policy. Status:Charged Off',
+                                                       'Late (31-120 days)']), 0, 1)
+
+loan_data['good_bad']
+
+# Splitting Data
+from sklearn.model_selection import train_test_split
+
+# Takes a set of inputs and a set of targets as arguments. Splits the inputs and the targets into four dataframes:
+# Inputs - Train, Inputs - Test, Targets - Train, Targets - Test.
+train_test_split(loan_data.drop('good_bad',axis=1),loan_data['good_bad'])
+
+# We split two dataframes with inputs and targets, each into a train and test dataframe, and store them in variables.
+loan_data_inputs_train, loan_data_inputs_test, loan_data_targets_train, loan_data_targets_test = train_test_split(loan_data.drop('good_bad',axis=1),loan_data['good_bad'])
+
+# 349'713 of observations x 207 variables
+loan_data_inputs_train.shape
+# 349'713 of observations
+loan_data_targets_train.shape
+# 116'572 of observations x 207 variables
+loan_data_inputs_test.shape
+# 116'572 of observations
+loan_data_targets_test.shape
+
+# # We split two dataframes with inputs and targets, each into a train and test dataframe, and store them in variables.
+# This time we set the size of the test dataset to be 20%.
+# Respectively, the size of the train dataset becomes 80%.
+# We also set a specific random state.
+# This would allow us to perform the exact same split multimple times.
+# This means, to assign the exact same observations to the train and test datasets.
+loan_data_inputs_train, loan_data_inputs_test, loan_data_targets_train, loan_data_targets_test = train_test_split(loan_data.drop('good_bad',axis=1),loan_data['good_bad'], test_size=0.2, random_state = 42)
+
+
+df_inputs_prep = loan_data_inputs_train
+df_targets_prepr = loan_data_targets_train
+
+df_inputs_prep['grade'].unique()
+
+df1 = pd.concat([df_inputs_prep['grade'],df_targets_prepr],axis=1)
+
+# Groups the data according to a criterion contained in one column.
+# Does not turn the names of the values of the criterion as indexes.
+# Aggregates the data in another column, using a selected function.
+# In this specific case, we group by the column with index 0 and we aggregate the values of the column with index 1.
+# More specifically, we count them.
+# In other words, we count the values in the column with index 1 for each value of the column with index 0.
+df1.groupby(df1.columns.values[0], as_index = False)[df1.columns.values[1]].count()
+
+# Groups the data according to a criterion contained in one column.
+# Does not turn the names of the values of the criterion as indexes.
+# Aggregates the data in another column, using a selected function.
+# Here we calculate the mean of the values in the column with index 1 for each value of the column with index 0.
+df1.groupby(df1.columns.values[0], as_index = False)[df1.columns.values[1]].mean()
+
+# Concatenates two dataframes along the columns.
+df1 = pd.concat([df1.groupby(df1.columns.values[0], as_index = False)[df1.columns.values[1]].count(),
+                df1.groupby(df1.columns.values[0], as_index = False)[df1.columns.values[1]].mean()], axis = 1)
+
+df1 = df1.iloc[:, [0, 1, 3]]
+
+# Changes the names of the columns of a dataframe.
+df1.columns = [df1.columns.values[0], 'n_obs', 'prop_good']
+
+# We divide the values of one column by he values of another column and save the result in a new variable.
+df1['prop_n_obs'] = df1['n_obs'] / df1['n_obs'].sum()
+
+df1['n_good'] = df1['prop_good'] * df1['n_obs']
+# We multiply the values of one column by he values of another column and save the result in a new variable.
+df1['n_bad'] = (1 - df1['prop_good']) * df1['n_obs']
+
+df1['prop_n_good'] = df1['n_good'] / df1['n_good'].sum()
+df1['prop_n_bad'] = df1['n_bad'] / df1['n_bad'].sum()
+
+# We take the natural logarithm of a variable and save the result in a nex variable.
+df1['WoE'] = np.log(df1['prop_n_good'] / df1['prop_n_bad'])
+
+# Sorts a dataframe by the values of a given column.
+df1 = df1.sort_values(['WoE'])
+# We reset the index of a dataframe and overwrite it.
+df1 = df1.reset_index(drop = True)
+
+# We take the difference between two subsequent values of a column. Then, we take the absolute value of the result.
+df1['diff_prop_good'] = df1['prop_good'].diff().abs()
+# We take the difference between two subsequent values of a column. Then, we take the absolute value of the result.
+df1['diff_WoE'] = df1['WoE'].diff().abs()
+
+df1['IV'] = (df1['prop_n_good'] - df1['prop_n_bad']) * df1['WoE']
+df1['IV'] = df1['IV'].sum()
+
+df1
+
+
+
+
